@@ -1,8 +1,7 @@
-# ---------------------------------------------------------
-# TALLER: CIENCIA DE DATOS APLICADA A LA CALIDAD DE SOFTWARE
-# ---------------------------------------------------------
-# Caso de Estudio: Predicción de Bugs en Módulos de la NASA.
-# Basado en el dataset histórico NASA Metrics Data Program.
+# ==============================================================================
+# TALLER MAGISTRAL: IA APLICADA AL SECTOR FINANCIERO
+# Caso: Decisiones de crédito con Machine Learning
+# ==============================================================================
 
 import pandas as pd
 import seaborn as sns
@@ -10,66 +9,199 @@ import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
+from pathlib import Path
 
-# ==========================================
-# 1. CARGA DE MÉTRICAS DE SOFTWARE
-# ==========================================
-# Sube 'nasa_software_bugs.csv' a Google Colab
-url = "nasa_software_bugs.csv" 
+# ---------------------------
+# CONFIGURACIÓN VISUAL
+# ---------------------------
+sns.set_theme(style="whitegrid")
 
-try:
-    df = pd.read_csv(url)
-    print("✅ Métricas de la NASA cargadas correctamente.")
-    print(f"Total de módulos analizados: {len(df)}")
-    print("\n--- Vista de métricas (LOC, McCabe, Operandos) ---")
-    print(df[['lineas_codigo', 'complejidad_mccabe', 'tiene_bug']].head())
-except:
-    print("❌ Error: Sube el archivo 'nasa_software_bugs.csv' a Colab.")
+COLORS = {
+    "aprobado": "#2ca02c",
+    "rechazado": "#d62728",
+    "neutro": "#1f77b4"
+}
 
-# ==========================================
-# 2. ANÁLISIS DE CALIDAD (QA Visual)
-# ==========================================
-plt.figure(figsize=(10,6))
-sns.scatterplot(data=df, x='lineas_codigo', y='complejidad_mccabe', hue='tiene_bug', palette='viridis', s=100)
-plt.title('Relación: Tamaño del Código vs Complejidad Lógica')
-plt.xlabel('Líneas de Código (LOC)')
-plt.ylabel('Complejidad Ciclomática (McCabe)')
-plt.grid(True, alpha=0.3)
+plt.rcParams["figure.figsize"] = (8, 5)
+
+# ---------------------------
+# 1. CARGA DE DATOS
+# ---------------------------
+print("\n--- 1. CARGA DE BASE DE DATOS BANCARIA ---")
+
+FILE = "creditos_bancarios.csv"
+
+if not Path(FILE).exists():
+    raise FileNotFoundError("❌ Sube el archivo 'creditos_bancarios.csv' al entorno.")
+
+df = pd.read_csv(FILE)
+
+print(f"✅ Historial cargado: {len(df)} clientes")
+display(df.sample(5))
+
+# ---------------------------
+# 2. ANÁLISIS EXPLORATORIO
+# ---------------------------
+print("\n--- 2. ANÁLISIS EXPLORATORIO ---")
+
+# 🔥 MAPA DE CALOR
+print("\n[GRÁFICO 1] MAPA DE RELACIONES ENTRE VARIABLES")
+
+correlation = df.corr(numeric_only=True)
+
+plt.figure(figsize=(7, 5))
+sns.heatmap(
+    correlation,
+    annot=True,
+    cmap="coolwarm",
+    fmt=".2f",
+    linewidths=0.5
+)
+plt.title("Relación entre variables (correlación)")
 plt.show()
 
-# ==========================================
-# 3. ENTRENAMIENTO DEL MODELO (Clasificador de Bugs)
-# ==========================================
-# Features: Métricas de complejidad y esfuerzo
-X = df[['lineas_codigo', 'complejidad_mccabe', 'entradas_unicas', 'esfuerzo_desarrollo']]
-y = df['tiene_bug']
+print("""
+Cómo leerlo:
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+- Valores cercanos a +1 → relación directa (sube uno, sube el otro)
+- Valores cercanos a -1 → relación inversa (sube uno, baja el otro)
 
-# Modelo: Árbol de Decisión (Fácil de interpretar para un desarrollador)
-modelo = DecisionTreeClassifier(max_depth=3)
+Punto clave del negocio:
+- Endeudamiento vs Crédito Aprobado → relación negativa fuerte
+  → A mayor deuda, menor probabilidad de aprobación
+
+- Salario vs Crédito Aprobado → relación positiva
+  → Mayor ingreso, mejor perfil crediticio
+""")
+
+# 🔥 KDE
+print("\n[GRÁFICO 2] DISTRIBUCIÓN DE SALARIOS")
+
+plt.figure(figsize=(10, 5))
+
+sns.kdeplot(
+    data=df[df['Credito_Aprobado'] == 1],
+    x='Salario_Mensual_USD',
+    color=COLORS["aprobado"],
+    fill=True,
+    label="Aprobados",
+    alpha=0.5
+)
+
+sns.kdeplot(
+    data=df[df['Credito_Aprobado'] == 0],
+    x='Salario_Mensual_USD',
+    color=COLORS["rechazado"],
+    fill=True,
+    label="Rechazados",
+    alpha=0.5
+)
+
+plt.title("Distribución de salario según resultado del crédito")
+plt.xlabel("Salario Mensual (USD)")
+plt.legend()
+plt.show()
+
+print("""
+Lectura del gráfico:
+
+- La curva de aprobados tiende a concentrarse en salarios más altos
+- La de rechazados se desplaza hacia salarios más bajos
+
+Interpretación:
+El ingreso es un factor determinante en la decisión de crédito.
+""")
+
+# 🔥 SCATTER (añadido sin romper tu flujo)
+print("\n[GRÁFICO 3] RELACIÓN SALARIO VS ENDEUDAMIENTO")
+
+plt.figure()
+
+sns.scatterplot(
+    data=df,
+    x='Salario_Mensual_USD',
+    y='Endeudamiento_Actual_Pct',
+    hue='Credito_Aprobado',
+    palette=[COLORS["rechazado"], COLORS["aprobado"]],
+    alpha=0.7
+)
+
+plt.title("Comportamiento de clientes")
+plt.show()
+
+print("""
+Aquí se ve el patrón real:
+
+- Zona inferior derecha → clientes ideales (alto salario, baja deuda)
+- Zona superior izquierda → clientes de alto riesgo
+""")
+
+# ---------------------------
+# 3. MODELO
+# ---------------------------
+print("\n--- 3. ENTRENAMIENTO DEL MODELO ---")
+
+X = df[['Salario_Mensual_USD', 'Endeudamiento_Actual_Pct']]
+y = df['Credito_Aprobado']
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+modelo = DecisionTreeClassifier(max_depth=3, random_state=42)
 modelo.fit(X_train, y_train)
 
-# Medición de eficiencia
-precision = accuracy_score(y_test, modelo.predict(X_test))
-print(f"\n📊 Precisión del Predictor de Bugs: {precision:.2%}")
+accuracy = accuracy_score(y_test, modelo.predict(X_test))
+print(f"✔️ Precisión del modelo: {accuracy:.2%}")
 
-# Visualización de las reglas de negocio aprendidas por la IA
-plt.figure(figsize=(16,8))
-plot_tree(modelo, feature_names=X.columns, class_names=['Estable', 'BUG'], filled=True, rounded=True)
-plt.title("Árbol de Decisión: ¿Qué hace que un código sea propenso a errores?")
+# ---------------------------
+# 4. ÁRBOL DE DECISIÓN
+# ---------------------------
+print("\n--- 4. INTERPRETACIÓN DEL MODELO ---")
+
+print("""
+CÓMO ENTENDER EL GINI:
+
+El índice Gini mide qué tan mezclado está un grupo:
+
+- Gini = 0 → grupo puro (todos iguales)
+- Gini alto → mezcla de perfiles distintos
+
+Qué hace el modelo:
+Divide a los clientes en grupos cada vez más homogéneos.
+
+Ejemplo:
+Primero separa por nivel de endeudamiento.
+Luego refina usando el salario.
+""")
+
+plt.figure(figsize=(16, 8))
+
+plot_tree(
+    modelo,
+    feature_names=X.columns,
+    class_names=['RECHAZADO', 'APROBADO'],
+    filled=True,
+    rounded=True,
+    proportion=True,
+    fontsize=11
+)
+
+plt.title("Árbol de decisión: reglas del modelo")
 plt.show()
 
-# ==========================================
-# 4. TESTEA TU PROPIO MÓDULO
-# ==========================================
-print("\n--- ANALIZADOR DE CÓDIGO PREDICTIVO ---")
-# [lineas_codigo, complejidad_mccabe, entradas_unicas, esfuerzo_desarrollo]
-# Ejemplo: Un módulo de 100 líneas, muy complejo (20), con 30 entradas.
-mi_codigo = [[100, 20, 30, 1500]] 
+# ---------------------------
+# 5. SIMULADOR
+# ---------------------------
+print("\n--- 5. SIMULADOR ---")
 
-prediccion = modelo.predict(mi_codigo)
-if prediccion[0] == 1:
-    print("🚨 ALERTA: Este módulo tiene alta probabilidad de contener un BUG. ¡Revisar QA!")
-else:
-    print("🟢 STATUS: El módulo cumple con los estándares de estabilidad.")
+def evaluar_cliente(salario, deuda):
+    input_df = pd.DataFrame([{
+        'Salario_Mensual_USD': salario,
+        'Endeudamiento_Actual_Pct': deuda
+    }])
+    pred = modelo.predict(input_df)[0]
+    return "APROBADO" if pred == 1 else "RECHAZADO"
+
+print("Cliente riesgoso ($2500, deuda 50%):", evaluar_cliente(2500, 50))
+print("Cliente ideal ($4000, deuda 10%):", evaluar_cliente(4000, 10))
